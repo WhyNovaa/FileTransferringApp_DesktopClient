@@ -7,43 +7,58 @@ use reqwest::blocking::Client;
 use std::collections::HashMap;
 use dotenv::dotenv;
 use std::env;
-use iced::Alignment::Center;
-use iced::futures::future::err;
-use iced::futures::TryFutureExt;
+use iced::window::Icon;
 use serde_json;
-use serde::{Deserialize, Serialize};
 
 
 fn main() -> iced::Result {
 
+    let mut settings = Settings::default();
+
     let window_settings = window::Settings {
         min_size: Some(Size::new(700.0, 600.0)),
+        icon: Some(load_icon("src/resources/icon.ico")),
         ..window::Settings::default()
     };
 
-    App::run(Settings{
-        window: window_settings,
-        ..Settings::default()
-    })
+
+    settings.window = window_settings;
+    App::run(settings)
+}
+
+fn load_icon(path: &str) -> Icon {
+    let result = window::icon::from_file(path);
+
+    match result {
+        Ok(icon) => {
+            icon.into()
+        }
+        Err(e) => {
+            println!("Load icon error");
+            let rgba: Vec<u8> = create_rgba_image(16, 16);
+            let width = 16;
+            let height = 16;
+            window::icon::from_rgba(rgba, width, height).expect("Failed to create icon")
+        }
+    }
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Group {
-    id: i64,
-    name: String,
-    rights: String
-}
-#[derive(Serialize, Deserialize, Debug)]
-struct User {
-    id: i64,
-    login: String,
-    hashed_password: String,
-    salt: String,
-    group: Group
-}
+fn create_rgba_image(width: u32, height: u32) -> Vec<u8> {
+    let mut image = vec![0; (width * height * 4) as usize];
 
+    for y in 0..height {
+        for x in 0..width {
+            let index = (y * width + x) as usize * 4;
+            image[index] = 135;
+            image[index + 1] = 206;
+            image[index + 2] = 250;
+            image[index + 3] = 255;
+        }
+    }
 
+    image
+}
 
 
 struct App {
@@ -52,7 +67,8 @@ struct App {
     login_field: LoginField,
     token: String,
     server_url: String,
-    client: Client
+    client: Client,
+    login_error: Option<String>
 }
 
 struct LoginField {
@@ -91,7 +107,8 @@ impl Sandbox for App {
             },
             token: String::new(),
             server_url: env::var("SERVER_URL").expect("SERVER_URL must be set").to_string(),
-            client: Client::new()
+            client: Client::new(),
+            login_error: None
         }
     }
 
@@ -113,13 +130,14 @@ impl Sandbox for App {
                 };
             }
 
+
             Message::LoginSubmit => {
                 let mut params = HashMap::new();
-                params.insert("username", "test1");
-                params.insert("password", "test1");
+                params.insert("username", self.login_field.login.to_string());
+                params.insert("password", self.login_field.password.to_string());
 
                 // Обработка ошибок вручную
-                let result = self.client.post("http://127.0.0.1:8000/login")
+                let result = self.client.post(self.server_url.to_string() + "/login")
                     .form(&params)
                     .send();
 
@@ -127,22 +145,43 @@ impl Sandbox for App {
                     Ok(response) => {
                         let json_result: Result<HashMap<String, String>, _> = response.json();
                         match json_result {
-                            Ok(json) => println!("Response JSON: {:?}", json["token"]),
-                            Err(e) => eprintln!("Error parsing JSON: {}", e),
+                            Ok(json) => {
+                                if let Some(token) = json.get("token") {
+                                    println!("{}", token);
+                                    self.token = token.clone();
+                                    self.page = Page::Main;
+                                }
+                                else {
+                                    self.login_error = Some("Wrong username or password".to_string())
+                                }
+                            },
+
+                            Err(e) => {
+                                self.login_error= Some("Wrong username or password".to_string());
+                                eprintln!("Error parsing JSON: {}", e)
+                            },
+
                         }
                     }
-                    Err(e) => eprintln!("Error sending request: {}", e),
+                    Err(e) => {
+                        self.login_error = Some("Internet connection error".to_string());
+                        eprintln!("Error sending request: {}", e)
+                    },
+
                 }
             }
+
 
             Message::LoginFieldChanged(login, password) => {
                 self.login_field.login = login;
                 self.login_field.password = password;
             }
 
+
             Message::DeleteFile(_filename) => {
                 // Реализация удаления файла
             }
+
 
             Message::EditFile(_filename) => {
                 // Реализация редактирования файла
@@ -151,14 +190,15 @@ impl Sandbox for App {
     }
     fn view(&self) -> Element<Message> {
         let content = match self.page {
-            Page::Login => log_in_page(&self.login_field),
+            Page::Login => log_in_page(&self.login_field, self.login_error.clone()),
             Page::Main => main_page(&self.client ,&self.token)
 
         };
 
 
         let wrapper =  Column::new();
-        let wrapper = Scrollable::new(
+
+        let wrapper =
             match self.page {
             Page::Login => wrapper.spacing(10)
                 .width(Length::Fill)
@@ -171,7 +211,7 @@ impl Sandbox for App {
                 .width(Length::Fill)
                 .align_items(Alignment::Center)
                 .push(content),
-        });
+        };
 
         let temp_container = container(wrapper)
             .width(Length::Fill)
@@ -274,8 +314,8 @@ fn page_footer() -> Container<'static, Message> {
     container(footer).center_x().center_y()
 
 }
-fn log_in_page(login_field: &LoginField) -> Container<Message> {
-    let column = Column::new()
+fn log_in_page(login_field: &LoginField, login_error: Option<String>) -> Container<Message> {
+    let mut column = Column::new()
         .push(text("File Transferring App"))
         .push(
             input_field("Login", &login_field.login)
@@ -298,17 +338,29 @@ fn log_in_page(login_field: &LoginField) -> Container<Message> {
         .align_items(Alignment::Center)
         .spacing(40);
 
-    container(column)
-        .padding(Padding::from(20))
-        .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
+    if let Some(error) = login_error {
+        column = column.push(
+            text(error)
+                .size(16)
+                .style(iced::theme::Text::Color(iced::Color::from_rgb(1.0, 0.0, 0.0)))
+        );
+        container(column)
+            .padding(Padding::from([20, 20, 0, 20]))
+            .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
+    }
+    else {
+        container(column)
+            .padding(Padding::from(20))
+            .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
+    }
 }
 
 fn create_row() -> Container<'static, Message> {
     let row = Row::new()
         .push(Space::with_width(10))
         .push(text("text1").size(20))
-        .push(Space::with_width(Length::Fill)) // Используем пробел для распределения пространства
-        .push(edit_btn(Message::DeleteFile("TEMP".to_string())))
+        .push(Space::with_width(Length::Fill))
+        .push(edit_btn(Message::EditFile("TEMP".to_string())))
         .push(Space::with_width(20))
         .push(del_btn(Message::DeleteFile("TEMP".to_string())))
         .push(Space::with_width(10))
@@ -323,21 +375,21 @@ fn main_page(client: &Client, token: &str) -> Container<'static, Message> {
 
     let mut column = Column::new()
         .width(Length::Fill)
-        .spacing(30);
+        .spacing(15);
 
     column = column.push(Space::with_height(0));
-    for i in 1..50 {
+    for _ in 1..50 {
 
         column = column.push(
                 Row::new().push(Space::with_width(20))
             .push(create_row())
             .push(Space::with_width(20))
-            .height(40)
+            .height(50)
         );
     }
     column = column.push(Space::with_height(0));
 
-    container(column)
+    container(Scrollable::new(column))
         .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
         .align_y(Vertical::Top)
 
@@ -445,7 +497,7 @@ struct ContainerStyle;
 impl container::StyleSheet for ContainerStyle {
     type Style = Theme;
 
-    fn appearance(&self, style: &Self::Style) -> container::Appearance {
+    fn appearance(&self, _: &Self::Style) -> container::Appearance {
         container::Appearance {
             text_color: Default::default(),
             border: Border::with_radius(5),
@@ -463,7 +515,7 @@ struct FileStyle;
 impl container::StyleSheet for FileStyle {
     type Style = Theme;
 
-    fn appearance(&self, style: &Self::Style) -> container::Appearance {
+    fn appearance(&self, _: &Self::Style) -> container::Appearance {
         container::Appearance {
             text_color: Default::default(),
             border: Border::with_radius(50),
@@ -476,3 +528,4 @@ impl container::StyleSheet for FileStyle {
         }
     }
 }
+
