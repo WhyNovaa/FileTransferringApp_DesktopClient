@@ -1,17 +1,15 @@
 use iced::{Alignment, Element, Length, Padding};
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, container, text, Button, Checkbox, Column, Container, Image, Row, Scrollable, Space, TextInput};
-use reqwest::blocking::Client;
 
 use crate::styles::{ContainerStyle, ButtonStyle, FileStyle};
 use crate::app::{App, LoginField, Message, Page};
-
 
 pub fn view(app: &App) -> Element<Message> {
     let content =
         match app.page {
             Page::Login => log_in_page(&app.login_field, app.login_error.clone()),
-            Page::Main => main_page(&app.client ,&app.token, &app.packages)
+            Page::Main => main_page(&app)
         };
 
 
@@ -110,7 +108,7 @@ pub fn log_in_page(login_field: &LoginField, login_error: Option<String>) -> Con
                     }
                 )
         )
-        .push(submit_btn("Login", Message::LoginSubmit))
+        .push(submit_btn("Log In", Message::LoginSubmit))
         .padding(Padding::from([50, 20]))
         .align_items(Alignment::Center)
         .spacing(40);
@@ -130,6 +128,32 @@ pub fn log_in_page(login_field: &LoginField, login_error: Option<String>) -> Con
             .padding(Padding::from(20))
             .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
     }
+}
+
+pub fn main_page(app: &App) -> Container<'static, Message> {
+    let mut column = Column::new()
+        .width(Length::Fill)
+        .spacing(15);
+
+    column = column.push(Space::with_height(0));
+
+
+    for (index, package) in app.packages.iter().enumerate() {
+        column = column.push(package.view(index));
+    }
+
+    column = column.push(Space::with_height(0));
+
+
+    let scrollable = Scrollable::new(column)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+
+    container(scrollable)
+        .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
+        .align_y(Vertical::Top)
+
 }
 
 pub fn input_field(_placeholder: &str, _value: &str, ) -> TextInput<'static, Message> {
@@ -171,30 +195,4 @@ pub fn submit_btn(name: &str, event: Message) -> Button<Message> {
         .width(Length::Fixed(500.0))
         .height(Length::Fixed(45.0))
         .style(iced::theme::Button::Custom(Box::new(ButtonStyle::Standard)))
-}
-
-pub fn main_page(client: &Client, token: &str, packages: &Vec<PackageRow>) -> Container<'static, Message> {
-    let mut column = Column::new()
-        .width(Length::Fill)
-        .spacing(15);
-
-    column = column.push(Space::with_height(0));
-
-
-    for (index, package) in packages.iter().enumerate() {
-        column = column.push(package.view(index));
-    }
-
-    column = column.push(Space::with_height(0));
-
-
-    let scrollable = Scrollable::new(column)
-        .width(Length::Fill)
-        .height(Length::Fill);
-
-
-    container(scrollable)
-        .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
-        .align_y(Vertical::Top)
-
 }

@@ -48,6 +48,7 @@ pub enum Message {
 impl Sandbox for App {
     type Message = Message;
 
+
     fn new() -> Self {
         dotenv().ok();
         Self {
