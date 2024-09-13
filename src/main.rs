@@ -2,14 +2,13 @@ use iced::{window, Length, Padding, Size, Vector};
 use iced::{Alignment, Background, Border, Element, Sandbox, Settings, Shadow};
 use iced::alignment::{Horizontal, Vertical};
 use iced::theme::Theme;
-use iced::widget::{button, container, TextInput, text, Button, Column, Container, Row, Scrollable, Space, Image};
+use iced::widget::{button, container, TextInput, text, Button, Column, Container, Row, Scrollable, Space, Image, Checkbox};
 use reqwest::blocking::Client;
 use std::collections::HashMap;
 use dotenv::dotenv;
 use std::env;
 use iced::window::Icon;
 use serde_json;
-
 
 fn main() -> iced::Result {
 
@@ -66,9 +65,10 @@ struct App {
     page: Page,
     login_field: LoginField,
     token: String,
-    server_url: String,
     client: Client,
-    login_error: Option<String>
+    login_error: Option<String>,
+    packages: Vec<PackageRow>,
+    server: Server
 }
 
 struct LoginField {
@@ -76,6 +76,10 @@ struct LoginField {
     password: String
 }
 
+struct Server {
+    URL: String,
+    grant_type: String,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Page{
     Login,
@@ -87,11 +91,43 @@ enum Message {
     ToggleTheme,
     LoginSubmit,
     LoginFieldChanged(String, String),
-    DeleteFile(String),
-    EditFile(String),
+    DeleteFileClicked(String),
+    EditFileClicked(String),
+    ToggleCheck(usize),
 }
 
 
+#[derive(Debug, Clone)]
+struct PackageRow {
+    checked: bool,
+    filename: String,
+}
+
+impl PackageRow {
+    fn new(filename: String) -> Self {
+        PackageRow {
+            checked: false,
+            filename,
+        }
+    }
+    fn view(&self, index: usize) -> Container<'static, Message> {
+        let row = Row::new()
+            .push(Space::with_width(10))
+            .push(Space::with_width(20))
+            .push(Checkbox::new("", self.checked).on_toggle(move |_| Message::ToggleCheck(index)))
+            .push(text(self.filename.to_string()).size(20))
+            .push(Space::with_width(Length::Fill))
+            .push(edit_btn(Message::EditFileClicked(self.filename.to_string())))
+            .push(Space::with_width(20))
+            .push(del_btn(Message::DeleteFileClicked(self.filename.to_string())))
+            .push(Space::with_width(10))
+            //.height(Length::Fill)
+            .align_items(Alignment::Center);
+
+        container(row)
+            .style(iced::theme::Container::Custom(Box::new(FileStyle)))
+    }
+}
 
 impl Sandbox for App {
     type Message = Message;
@@ -106,9 +142,15 @@ impl Sandbox for App {
                 password: String::new()
             },
             token: String::new(),
-            server_url: env::var("SERVER_URL").expect("SERVER_URL must be set").to_string(),
             client: Client::new(),
-            login_error: None
+            login_error: None,
+            packages: (1..=100)
+                .map(|i| PackageRow::new("Aboba".to_string()))
+                .collect(),
+            server: Server {
+                URL: env::var("SERVER_URL").expect("SERVER_URL must be set").to_string(),
+                grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer".to_owned()
+            }
         }
     }
 
@@ -132,43 +174,7 @@ impl Sandbox for App {
 
 
             Message::LoginSubmit => {
-                let mut params = HashMap::new();
-                params.insert("username", self.login_field.login.to_string());
-                params.insert("password", self.login_field.password.to_string());
-
-                // Обработка ошибок вручную
-                let result = self.client.post(self.server_url.to_string() + "/login")
-                    .form(&params)
-                    .send();
-
-                match result {
-                    Ok(response) => {
-                        let json_result: Result<HashMap<String, String>, _> = response.json();
-                        match json_result {
-                            Ok(json) => {
-                                if let Some(token) = json.get("token") {
-                                    println!("{}", token);
-                                    self.token = token.clone();
-                                    self.page = Page::Main;
-                                }
-                                else {
-                                    self.login_error = Some("Wrong username or password".to_string())
-                                }
-                            },
-
-                            Err(e) => {
-                                self.login_error= Some("Wrong username or password".to_string());
-                                eprintln!("Error parsing JSON: {}", e)
-                            },
-
-                        }
-                    }
-                    Err(e) => {
-                        self.login_error = Some("Internet connection error".to_string());
-                        eprintln!("Error sending request: {}", e)
-                    },
-
-                }
+                log_in_request(self);
             }
 
 
@@ -178,21 +184,29 @@ impl Sandbox for App {
             }
 
 
-            Message::DeleteFile(_filename) => {
+            Message::DeleteFileClicked(filename) => {
                 // Реализация удаления файла
+                println!("{}", filename);
             }
 
 
-            Message::EditFile(_filename) => {
+            Message::EditFileClicked(filename) => {
                 // Реализация редактирования файла
+                println!("{}", filename);
+            }
+
+            Message::ToggleCheck(index) => {
+                if let Some(row) = self.packages.get_mut(index) {
+                    row.checked = !row.checked;
+                }
             }
         }
     }
     fn view(&self) -> Element<Message> {
-        let content = match self.page {
+        let content =
+            match self.page {
             Page::Login => log_in_page(&self.login_field, self.login_error.clone()),
-            Page::Main => main_page(&self.client ,&self.token)
-
+            Page::Main => main_page(&self.client ,&self.token, &self.packages)
         };
 
 
@@ -224,82 +238,57 @@ impl Sandbox for App {
                 Page::Main => temp_container.align_y(Vertical::Top),
         };
         container.width(Length::Fill).height(Length::Fill).into()
+
+
+
     }
 
 
 }
 
-/*async fn login_reqwest(client: &Client, server_url: &String) -> Result<String, Box<dyn std::error::Error>> {
+
+
+
+
+fn log_in_request(app: &mut App) {
     let mut params = HashMap::new();
-    params.insert("username", "test1");
-    params.insert("password", "test1");
+    params.insert("username", app.login_field.login.to_string());
+    params.insert("password", app.login_field.password.to_string());
 
-    // Выполнение запроса и ожидание ответа
-    let response = client
-        .post(format!("{}/login", server_url))
+    let result = app.client.post(app.server.URL.to_string() + "/login")
         .form(&params)
-        .send()
-        .await?
-        .json::<HashMap<String, String>>()
-        .await?;
+        .send();
 
-    if let Some(token) = response.get("token") {
-        println!("Значение для 'token': {}", token); // TEMP
+    match result {
+        Ok(response) => {
+            let json_result: Result<HashMap<String, String>, _> = response.json();
+            match json_result {
+                Ok(json) => {
+                    if let Some(token) = json.get("token") {
+                        println!("{}", token);
+                        app.token = token.clone();
+                        app.page = Page::Main;
+                    }
+                    else {
+                        app.login_error = Some("Wrong username or password".to_string())
+                    }
+                },
 
-        let data = client
-            .get(format!("{}/admin/users", server_url))
-            .header("Authorization", format!("Bearer {}", token))
-            .send()
-            .await?
-            .text()
-            .await?;
+                Err(e) => {
+                    app.login_error= Some("Wrong username or password".to_string());
+                    eprintln!("Error parsing JSON: {}", e)
+                },
 
-        let users: Vec<User> = serde_json::from_str(&data)?;
-        for user in users {
-            println!("{}", user.login); // TEMP
-        }
-        Ok(String::from(token))
-    } else {
-        println!("Неправильный логин или пароль");
-        Err(format!("Request failed").into())
-    }
-}
-
-async fn check_login(client: &Client, server_url: &str) -> Result<String, String> {
-    let mut params = HashMap::new();
-    params.insert("username", "test1");
-    params.insert("password", "test1");
-
-    let response = client
-        .post(format!("{}/login", server_url))
-        .form(&params)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json::<HashMap<String, String>>()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if let Some(token) = response.get("token") {
-        Ok(token.clone())
-    } else {
-        Err("No token received".into())
-    }
-}
-async fn check_login1(client: &Client, server_url: &String) -> Option<String>{
-    match login_reqwest(client, server_url).await {
-        Ok(token) => {
-            if token != ""{
-                println!("Login successful!");
-                token.into()
-            } else {
-                println!("Login failed: No token received.");
-                token.into()
             }
         }
-        Err(e) => None
+        Err(e) => {
+            app.login_error = Some("Internet connection error".to_string());
+            eprintln!("Error sending request: {}", e)
+        },
+
     }
-}*/
+}
+
 fn page_footer() -> Container<'static, Message> {
     let footer = Row::new()
         .push(
@@ -355,41 +344,43 @@ fn log_in_page(login_field: &LoginField, login_error: Option<String>) -> Contain
     }
 }
 
-fn create_row() -> Container<'static, Message> {
+/*fn create_row() -> Container<'static, Message> {
     let row = Row::new()
         .push(Space::with_width(10))
         .push(text("text1").size(20))
         .push(Space::with_width(Length::Fill))
-        .push(edit_btn(Message::EditFile("TEMP".to_string())))
+        .push(edit_btn(Message::EditFileClicked("TEMP1".to_string())))
         .push(Space::with_width(20))
-        .push(del_btn(Message::DeleteFile("TEMP".to_string())))
+        .push(del_btn(Message::DeleteFileClicked("TEMP2".to_string())))
         .push(Space::with_width(10))
         .height(Length::Fill)
         .align_items(Alignment::Center);
 
     container(row)
         .style(iced::theme::Container::Custom(Box::new(FileStyle)))
-}
-fn main_page(client: &Client, token: &str) -> Container<'static, Message> {
+}*/
 
-
+fn main_page(client: &Client, token: &str, packages: &Vec<PackageRow>) -> Container<'static, Message> {
     let mut column = Column::new()
         .width(Length::Fill)
         .spacing(15);
 
     column = column.push(Space::with_height(0));
-    for _ in 1..50 {
 
-        column = column.push(
-                Row::new().push(Space::with_width(20))
-            .push(create_row())
-            .push(Space::with_width(20))
-            .height(50)
-        );
+
+    for (index, package) in packages.iter().enumerate() {
+        column = column.push(package.view(index));
     }
+
     column = column.push(Space::with_height(0));
 
-    container(Scrollable::new(column))
+
+    let scrollable = Scrollable::new(column)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+
+    container(scrollable)
         .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
         .align_y(Vertical::Top)
 
