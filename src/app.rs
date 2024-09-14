@@ -24,7 +24,6 @@ pub struct LoginField {
 
 pub struct Server {
     pub url: String,
-    pub grant_type: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Page{
@@ -37,9 +36,12 @@ pub enum Message {
     ToggleTheme,
     LoginSubmit,
     LoginFieldChanged(String, String),
-    DeleteFileClicked(String),
-    EditFileClicked(String),
+    DeleteFileClicked(usize),
+    EditFileClicked(usize),
     ToggleCheck(usize),
+    SelectAll(bool),
+    DeleteSelected,
+    Refresh,
 }
 
 
@@ -66,7 +68,6 @@ impl Sandbox for App {
                 .collect(),
             server: Server {
                 url: env::var("SERVER_URL").expect("SERVER_URL must be set").to_string(),
-                grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer".to_owned()
             }
         }
     }

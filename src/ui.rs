@@ -1,6 +1,7 @@
-use iced::{Alignment, Element, Length, Padding};
+use iced::{theme, Alignment, Element, Length, Padding};
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, container, text, Button, Checkbox, Column, Container, Image, Row, Scrollable, Space, TextInput};
+
 
 use crate::styles::{ContainerStyle, ButtonStyle, FileStyle};
 use crate::app::{App, LoginField, Message, Page};
@@ -21,9 +22,9 @@ pub fn view(app: &App) -> Element<Message> {
                 .width(Length::Fill)
                 .align_items(Alignment::Center)
                 .push(content)
-                .push(page_footer()),
+                .push(page_footer(app.page.clone())),
 
-            Page::Main => wrapper.push(page_footer())
+            Page::Main => wrapper.push(page_footer(app.page.clone()))
                 .spacing(10)
                 .width(Length::Fill)
                 .align_items(Alignment::Center)
@@ -34,7 +35,7 @@ pub fn view(app: &App) -> Element<Message> {
         .width(Length::Fill)
         .height(Length::Fill)
         .center_x()
-        .style(iced::theme::Container::Custom(Box::new(ContainerStyle)));
+        .style(theme::Container::Custom(Box::new(ContainerStyle)));
 
     let container = match app.page {
         Page::Login => temp_container.center_y(),
@@ -63,30 +64,44 @@ impl PackageRow {
             .push(Checkbox::new("", self.checked).on_toggle(move |_| Message::ToggleCheck(index)))
             .push(text(self.filename.to_string()).size(20))
             .push(Space::with_width(Length::Fill))
-            .push(edit_btn(Message::EditFileClicked(self.filename.to_string())))
+            .push(edit_btn(Message::EditFileClicked(index)))
             .push(Space::with_width(20))
-            .push(del_btn(Message::DeleteFileClicked(self.filename.to_string())))
+            .push(del_btn(Message::DeleteFileClicked(index)))
             .push(Space::with_width(10))
-            //.height(Length::Fill)
+            .height(60)
             .align_items(Alignment::Center);
 
         container(row)
-            .style(iced::theme::Container::Custom(Box::new(FileStyle)))
+            .style(theme::Container::Custom(Box::new(FileStyle)))
     }
 }
 
-pub fn page_footer() -> Container<'static, Message> {
-    let footer = Row::new()
-        .push(
-            button("Toggle Theme")
+pub fn page_footer(page: Page) -> Container<'static, Message> {
+    let mut footer = Row::new();
+
+        if page == Page::Main {
+            footer = footer
+                .push(button("Select all").on_press(Message::SelectAll(true))
+                    .style(theme::Button::Custom(Box::new(ButtonStyle::Standard))))
+                .push(button("Unselect all").on_press(Message::SelectAll(false))
+                    .style(theme::Button::Custom(Box::new(ButtonStyle::Standard))))
+                .push(button("Delete selected").on_press(Message::DeleteSelected)
+                    .style(theme::Button::Custom(Box::new(ButtonStyle::DeleteButton))))
+                .push(Space::with_width(Length::Fill))
+        }
+
+        footer = footer
+            .push(button("Toggle Theme")
                 .on_press(Message::ToggleTheme)
-                .style(iced::theme::Button::Custom(Box::new(ButtonStyle::ThemeButton)),
-                )
-        )
+                .style(theme::Button::Custom(Box::new(ButtonStyle::ThemeButton)))
+            )
         .align_items(Alignment::Center)
         .spacing(10);
+    if page == Page::Main {
+        footer = footer.push(refresh_btn());
+    }
 
-    container(footer).center_x().center_y()
+    container(footer).center_y().padding(Padding::from(10))
 
 }
 pub fn log_in_page(login_field: &LoginField, login_error: Option<String>) -> Container<Message> {
@@ -117,16 +132,16 @@ pub fn log_in_page(login_field: &LoginField, login_error: Option<String>) -> Con
         column = column.push(
             text(error)
                 .size(16)
-                .style(iced::theme::Text::Color(iced::Color::from_rgb(1.0, 0.0, 0.0)))
+                .style(theme::Text::Color(iced::Color::from_rgb(1.0, 0.0, 0.0)))
         );
         container(column)
             .padding(Padding::from([20, 20, 0, 20]))
-            .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
+            .style(theme::Container::Custom(Box::new(ContainerStyle)))
     }
     else {
         container(column)
             .padding(Padding::from(20))
-            .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
+            .style(theme::Container::Custom(Box::new(ContainerStyle)))
     }
 }
 
@@ -142,16 +157,16 @@ pub fn main_page(app: &App) -> Container<'static, Message> {
         column = column.push(package.view(index));
     }
 
-    column = column.push(Space::with_height(0));
+    column = column
+        .push(Space::with_height(0))
+        .padding(Padding::from([0, 15, 0, 5]));
 
 
-    let scrollable = Scrollable::new(column)
-        .width(Length::Fill)
-        .height(Length::Fill);
+    let scrollable = Scrollable::new(column);
 
 
     container(scrollable)
-        .style(iced::theme::Container::Custom(Box::new(ContainerStyle)))
+        .style(theme::Container::Custom(Box::new(ContainerStyle)))
         .align_y(Vertical::Top)
 
 }
@@ -170,7 +185,7 @@ pub fn del_btn(event: Message) -> Button<'static, Message> {
         .on_press(event)
         .width(32)
         .height(32)
-        .style(iced::theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
+        .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
 }
 
 pub fn edit_btn(event: Message) -> Button<'static, Message> {
@@ -180,9 +195,17 @@ pub fn edit_btn(event: Message) -> Button<'static, Message> {
         .on_press(event)
         .width(32)
         .height(32)
-        .style(iced::theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
+        .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
 }
 
+pub fn refresh_btn() -> Button<'static, Message> {
+    let image = Image::new("src/resources/refresh.png");
+    Button::new(image)
+        .on_press(Message::Refresh)
+        .width(32)
+        .height(32)
+        .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
+}
 
 pub fn submit_btn(name: &str, event: Message) -> Button<Message> {
     Button::new(

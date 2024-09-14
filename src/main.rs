@@ -1,14 +1,15 @@
 mod app;
-mod styles;
 mod utils;
-mod ui;
 mod handlers;
+mod ui;
+mod styles;
 
 use iced::{window, Sandbox, Size};
 use iced::{Settings};
 
 
 use crate::app::App;
+use crate::utils::load_icon;
 
 fn main() -> iced::Result {
 
@@ -16,7 +17,7 @@ fn main() -> iced::Result {
 
     let window_settings = window::Settings {
         min_size: Some(Size::new(700.0, 600.0)),
-        icon: Some(utils::load_icon("src/resources/icon.ico")),
+        icon: Some(load_icon("src/resources/icon.ico")),
         ..window::Settings::default()
     };
 

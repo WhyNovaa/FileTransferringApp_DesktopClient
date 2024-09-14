@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+
 use crate::app::{App, Message, Page};
 use crate::ui::PackageRow;
 
@@ -12,80 +13,81 @@ pub fn handle_update(app: &mut App, message: Message) {
             };
         }
         Message::LoginSubmit => {
-            log_in_request(app);
+            if log_in_request(app) {
+                files_request(app);
+            }
 
-            if let Some(files) = files_request(app) {
-                app.packages = files;
-            }
-            else {
-                app.packages = vec![];
-            }
 
         }
         Message::LoginFieldChanged(login, password) => {
             app.login_field.login = login;
             app.login_field.password = password;
         }
-        Message::DeleteFileClicked(filename) => {
+        Message::DeleteFileClicked(index) => {
+            delete_file_request(app, index);
 
-
-            println!("{}", filename);
+            println!("{}", index);
         }
-        Message::EditFileClicked(filename) => {
-            println!("{}", filename);
+        Message::EditFileClicked(index) => {
+            println!("{}", index);
         }
         Message::ToggleCheck(index) => {
             if let Some(row) = app.packages.get_mut(index) {
                 row.checked = !row.checked;
             }
         }
+        Message::SelectAll(checked) => {
+            for package_row in &mut app.packages {
+                package_row.checked = checked;
+            }
+        }
+        Message::DeleteSelected => {
+
+        }
+        Message::Refresh => {
+            files_request(app);
+        }
+
     }
 }
 
+pub fn log_in_request(app: &mut App) -> bool {
+    let params = [
+        ("username", app.login_field.login.as_str()),
+        ("password", app.login_field.password.as_str())
+    ];
 
-pub fn log_in_request(app: &mut App) {
-    let mut params = HashMap::new();
-    params.insert("username", app.login_field.login.to_string());
-    params.insert("password", app.login_field.password.to_string());
+    let url = format!("{}/login", app.server.url);
 
-    let response = app.client.post(app.server.url.to_string() + "/login")
+    let response = app.client.post(&url)
         .form(&params)
         .send();
 
     match response {
         Ok(response) => {
             let json_result: Result<HashMap<String, String>, _> = response.json();
-            match json_result {
-                Ok(json) => {
-                    if let Some(token) = json.get("token") {
-                        println!("{}", token);
-                        app.token = token.clone();
-                        app.page = Page::Main;
-                    }
-                    else {
-                        app.login_error = Some("Wrong username or password".to_string())
-                    }
-                },
-
-                Err(e) => {
-                    app.login_error= Some("Wrong username or password".to_string());
-                    eprintln!("Error parsing JSON: {}", e)
-                },
-
+            if let Ok(json) = json_result {
+                if let Some(token) = json.get("token") {
+                    app.token = token.clone();
+                    app.page = Page::Main;
+                    return true;
+                }
             }
+
+            app.login_error = Some("Wrong username or password".to_string());
+            false
         }
         Err(e) => {
-            app.login_error = Some("Internet connection error".to_string());
-            eprintln!("Error sending request: {}", e)
-        },
-
+            app.login_error = Some("Server connection error".to_string());
+            eprintln!("Error sending request: {}", e);
+            false
+        }
     }
 }
 
-pub fn files_request(app: &App) -> Option<Vec<PackageRow>> {
-    // Выполнение запроса
+pub fn files_request(app: &mut App) {
     let response = app.client
-        .get(app.server.url.to_string() + "/files/")
+        .get(format!("{}/files/", app.server.url))
         .header("Authorization", format!("Bearer {}", app.token))
         .send();
 
@@ -95,30 +97,56 @@ pub fn files_request(app: &App) -> Option<Vec<PackageRow>> {
                 Ok(data) => {
                     match serde_json::from_str::<Vec<String>>(&data) {
                         Ok(files) => {
-                            for i in &files{
-                                println!("{}", i);
-                            }
-                            let package_rows: Vec<PackageRow> = files
+                            app.packages = files
                                 .into_iter()
                                 .map(PackageRow::new)
                                 .collect();
-                            Some(package_rows)
                         }
                         Err(err) => {
                             eprintln!("Ошибка при разборе JSON: {}", err);
-                            None
+                            app.packages = vec![];
                         }
                     }
                 }
                 Err(err) => {
                     eprintln!("Ошибка при получении текста ответа: {}", err);
-                    None
+                    app.packages = vec![];
                 }
             }
         }
         Err(err) => {
             eprintln!("Ошибка при выполнении запроса: {}", err);
-            None
+            app.packages = vec![];
         }
+    }
+}
+
+
+pub fn delete_file_request(app: &mut App, index: usize) {
+    if index < app.packages.len() {
+        let package_row = &app.packages[index];
+        let filename = &package_row.filename;
+
+        let response = app.client
+            .delete(format!("{}/files/{}", app.server.url, filename))
+            .header("Authorization", format!("Bearer {}", app.token))
+            .send();
+
+        match response {
+            Ok(response) => {
+                if response.status().is_success() {
+                    app.packages.remove(index);
+                    println!("File deleted successfully");
+                } else {
+                    eprintln!("Failed to delete file. Status: {}", response.status());
+                }
+            }
+            Err(err) => {
+                eprintln!("Error sending delete request: {}", err);
+            }
+        }
+    }
+    else {
+        eprintln!("Index out of bounds");
     }
 }
