@@ -1,7 +1,12 @@
 use std::collections::HashMap;
-
+use reqwest::blocking::multipart;
+use rfd::FileDialog;
 use crate::app::{App, Message, Page};
 use crate::ui::PackageRow;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+use reqwest::blocking::multipart::Part;
 
 pub fn handle_update(app: &mut App, message: Message) {
     match message {
@@ -23,12 +28,9 @@ pub fn handle_update(app: &mut App, message: Message) {
             app.login_field.login = login;
             app.login_field.password = password;
         }
-        Message::DeleteFileClicked(index) => {
+        Message::DeleteFile(index) => {
             delete_file_request(app, index);
 
-            println!("{}", index);
-        }
-        Message::EditFileClicked(index) => {
             println!("{}", index);
         }
         Message::ToggleCheck(index) => {
@@ -47,7 +49,36 @@ pub fn handle_update(app: &mut App, message: Message) {
         Message::Refresh => {
             files_request(app);
         }
+        Message::DownloadFiles => {
 
+        }
+        Message::UploadFiles => {
+            if let Some(file_paths) = FileDialog::new()
+                .set_directory("/")
+                .pick_files() {
+                let mut form = multipart::Form::new();
+
+                for file_path in file_paths {
+                    let path = Path::new(&file_path);
+                    let file_name = path.file_name().unwrap_or_default().to_str().unwrap_or_default();
+
+                    let mut file = File::open(path).unwrap();
+                    let mut file_content = Vec::new();
+                    file.read_to_end(&mut file_content).unwrap();
+
+                    let part = Part::bytes(file_content).file_name(file_name.to_string());
+                    form = form.part("files", part);
+                }
+
+                let url = format!("{}/files/upload", app.server.url);
+                let response = app.client.post(&url)
+                    .multipart(form)
+                    .header("Authorization", format!("Bearer {}", app.token))
+                    .send();
+                println!("{:?}", response);
+
+            }
+        }
     }
 }
 

@@ -64,9 +64,9 @@ impl PackageRow {
             .push(Checkbox::new("", self.checked).on_toggle(move |_| Message::ToggleCheck(index)))
             .push(text(self.filename.to_string()).size(20))
             .push(Space::with_width(Length::Fill))
-            .push(edit_btn(Message::EditFileClicked(index)))
+            .push(download_btn())
             .push(Space::with_width(20))
-            .push(del_btn(Message::DeleteFileClicked(index)))
+            .push(del_btn(Message::DeleteFile(index)))
             .push(Space::with_width(10))
             .height(60)
             .align_items(Alignment::Center);
@@ -98,7 +98,10 @@ pub fn page_footer(page: Page) -> Container<'static, Message> {
         .align_items(Alignment::Center)
         .spacing(10);
     if page == Page::Main {
-        footer = footer.push(refresh_btn());
+        footer = footer
+            .push(button("Upload files").on_press(Message::UploadFiles)
+                .style(theme::Button::Custom(Box::new(ButtonStyle::Standard))))
+            .push(refresh_btn());
     }
 
     container(footer).center_y().padding(Padding::from(10))
@@ -188,7 +191,7 @@ pub fn del_btn(event: Message) -> Button<'static, Message> {
         .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
 }
 
-pub fn edit_btn(event: Message) -> Button<'static, Message> {
+/*pub fn edit_btn(event: Message) -> Button<'static, Message> {
     let image = Image::new("src/resources/edit.png");
 
     Button::new(image)
@@ -196,7 +199,7 @@ pub fn edit_btn(event: Message) -> Button<'static, Message> {
         .width(32)
         .height(32)
         .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
-}
+}*/
 
 pub fn refresh_btn() -> Button<'static, Message> {
     let image = Image::new("src/resources/refresh.png");
@@ -206,6 +209,24 @@ pub fn refresh_btn() -> Button<'static, Message> {
         .height(32)
         .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
 }
+
+pub fn download_btn() -> Button<'static, Message> {
+    let image = Image::new("src/resources/download.png");
+    Button::new(image)
+        .on_press(Message::DownloadFiles)
+        .width(32)
+        .height(32)
+        .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
+}
+pub fn upload_btn() -> Button<'static, Message> {
+    let image = Image::new("src/resources/download.png");
+    Button::new(image)
+        .on_press(Message::UploadFiles)
+        .width(32)
+        .height(32)
+        .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
+}
+
 
 pub fn submit_btn(name: &str, event: Message) -> Button<Message> {
     Button::new(
@@ -217,5 +238,5 @@ pub fn submit_btn(name: &str, event: Message) -> Button<Message> {
         .on_press(event)
         .width(Length::Fixed(500.0))
         .height(Length::Fixed(45.0))
-        .style(iced::theme::Button::Custom(Box::new(ButtonStyle::Standard)))
+        .style(theme::Button::Custom(Box::new(ButtonStyle::Standard)))
 }

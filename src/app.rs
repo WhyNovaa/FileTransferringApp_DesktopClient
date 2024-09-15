@@ -36,12 +36,14 @@ pub enum Message {
     ToggleTheme,
     LoginSubmit,
     LoginFieldChanged(String, String),
-    DeleteFileClicked(usize),
-    EditFileClicked(usize),
+    DeleteFile(usize),
+    //EditFileClicked(usize),
     ToggleCheck(usize),
     SelectAll(bool),
     DeleteSelected,
     Refresh,
+    DownloadFiles,
+    UploadFiles,
 }
 
 
