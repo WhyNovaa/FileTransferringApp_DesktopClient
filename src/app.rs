@@ -19,7 +19,7 @@ pub struct App {
 
 pub struct LoginField {
     pub login: String,
-    pub password: String
+    pub password: String,
 }
 
 pub struct Server {
@@ -37,12 +37,11 @@ pub enum Message {
     LoginSubmit,
     LoginFieldChanged(String, String),
     DeleteFile(usize),
-    //EditFileClicked(usize),
     ToggleCheck(usize),
     SelectAll(bool),
     DeleteSelected,
     Refresh,
-    DownloadFiles,
+    DownloadFile(String),
     UploadFiles,
 }
 
@@ -60,7 +59,7 @@ impl Sandbox for App {
             page: Page::Login,
             login_field: LoginField {
                 login: String::new(),
-                password: String::new()
+                password: String::new(),
             },
             token: String::new(),
             client: Client::new(),

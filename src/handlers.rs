@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use reqwest::blocking::multipart;
-use rfd::FileDialog;
 use crate::app::{App, Message, Page};
 use crate::ui::PackageRow;
-use std::fs::File;
-use std::io::Read;
+use std::fs::{metadata, File};
+use std::io::{copy, Read};
 use std::path::Path;
+use native_dialog::FileDialog;
 use reqwest::blocking::multipart::Part;
 
 pub fn handle_update(app: &mut App, message: Message) {
@@ -44,43 +44,177 @@ pub fn handle_update(app: &mut App, message: Message) {
             }
         }
         Message::DeleteSelected => {
-
+            if delete_selected(app) {
+                files_request(app);
+            }
+            else {
+                println!("Delete files error");
+            }
         }
         Message::Refresh => {
             files_request(app);
         }
-        Message::DownloadFiles => {
-
+        Message::DownloadFile(filename) => {
+            download_request(app, filename);
         }
         Message::UploadFiles => {
-            if let Some(file_paths) = FileDialog::new()
-                .set_directory("/")
-                .pick_files() {
-                let mut form = multipart::Form::new();
-
-                for file_path in file_paths {
-                    let path = Path::new(&file_path);
-                    let file_name = path.file_name().unwrap_or_default().to_str().unwrap_or_default();
-
-                    let mut file = File::open(path).unwrap();
-                    let mut file_content = Vec::new();
-                    file.read_to_end(&mut file_content).unwrap();
-
-                    let part = Part::bytes(file_content).file_name(file_name.to_string());
-                    form = form.part("files", part);
-                }
-
-                let url = format!("{}/files/upload", app.server.url);
-                let response = app.client.post(&url)
-                    .multipart(form)
-                    .header("Authorization", format!("Bearer {}", app.token))
-                    .send();
-                println!("{:?}", response);
-
+            if upload_request(app) {
+                files_request(app);
+            }
+            else {
+                println!("Upload files error");
             }
         }
     }
 }
+
+
+fn upload_request(app: &App) -> bool {
+    let result = FileDialog::new()
+        .set_location("~")
+        .show_open_multiple_file();
+
+    match result
+    {
+        Ok(file_paths) => {
+            let mut form = multipart::Form::new();
+
+            for file_path in file_paths {
+                let path = Path::new(&file_path);
+
+                let file_data = metadata(path).unwrap();
+                if file_data.len() > 524288000 {
+                    println!("File {:?} size is bigger than 500MB", file_path);
+                    continue;
+                }
+                let file_name = path.file_name().unwrap_or_default().to_str().unwrap_or_default();
+
+                let mut file = File::open(path).unwrap();
+                let mut file_content = Vec::new();
+
+                file.read_to_end(&mut file_content).unwrap();
+
+                let part = Part::bytes(file_content).file_name(file_name.to_string());
+                form = form.part("files", part);
+            }
+
+            let url = format!("{}/files/upload", app.server.url);
+            let response = app.client.post(&url)
+                .multipart(form)
+                .header("Authorization", format!("Bearer {}", app.token))
+                .send();
+
+            println!("{:?}", response);
+
+            response.unwrap().status().is_success()
+        }
+        Err(e) => {
+            eprintln!("Error {}", e);
+            false
+        }
+
+    }
+
+}
+
+
+fn download_request(app: &App, filename: String) -> bool {
+    let result = FileDialog::new().set_location("~")
+        .show_open_single_dir();
+
+    match result {
+        Ok(dir_path) => {
+            if let Some(dir_path) = dir_path {
+                let file_path = Path::new(&dir_path).join(filename.clone());
+
+                let file = File::create(file_path);
+                match file
+                {
+                    Ok(mut file) => {
+                        let url = format!("{}/files/", app.server.url);
+
+                        let response = app.client.get(&url)
+                            .json(&filename)
+                            .header("Authorization", format!("Bearer {}", app.token))
+                            .send();
+
+                        match response
+                        {
+                            Ok(response) => {
+                                let content = response.bytes();
+
+                                match content
+                                {
+                                    Ok(content) => {
+                                        match copy(&mut content.as_ref(), &mut file)
+                                        {
+                                            Ok(_) => {
+                                                true
+                                            }
+                                            Err(e) => {
+                                                eprintln!("{}", e);
+                                                false
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("{}", e);
+                                        false
+                                    }
+                                }
+
+                            }
+
+                            Err(e) => {
+                                eprintln!("{}", e);
+                                false
+                            }
+                        }
+
+                    }
+
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        false
+                    }
+                }
+            }
+            else {
+                eprintln!("Dir path error");
+                false
+            }
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            false
+        }
+    }
+}
+fn delete_selected(app: &App) -> bool {
+    let mut file_list: Vec<String> = vec![];
+
+    for package in &app.packages {
+        if package.checked {
+            file_list.push(package.filename.clone());
+        }
+    }
+    if file_list.len() > 0
+    {
+        let url = format!("{}/files/", app.server.url);
+        let response = app.client.delete(&url)
+            .json(&file_list)
+            .header("Authorization", format!("Bearer {}", app.token))
+            .send();
+
+        println!("{:?}", response);
+        response.unwrap().status().is_success()
+    }
+    else {
+        false
+    }
+}
+
+
 
 pub fn log_in_request(app: &mut App) -> bool {
     let params = [
@@ -94,7 +228,8 @@ pub fn log_in_request(app: &mut App) -> bool {
         .form(&params)
         .send();
 
-    match response {
+    match response
+    {
         Ok(response) => {
             let json_result: Result<HashMap<String, String>, _> = response.json();
             if let Ok(json) = json_result {
@@ -123,10 +258,13 @@ pub fn files_request(app: &mut App) {
         .send();
 
     match response {
+
         Ok(resp) => {
-            match resp.text() {
+            match resp.text()
+            {
                 Ok(data) => {
-                    match serde_json::from_str::<Vec<String>>(&data) {
+                    match serde_json::from_str::<Vec<String>>(&data)
+                    {
                         Ok(files) => {
                             app.packages = files
                                 .into_iter()
@@ -143,12 +281,14 @@ pub fn files_request(app: &mut App) {
                     eprintln!("Ошибка при получении текста ответа: {}", err);
                     app.packages = vec![];
                 }
+
             }
         }
         Err(err) => {
             eprintln!("Ошибка при выполнении запроса: {}", err);
             app.packages = vec![];
         }
+
     }
 }
 
@@ -163,7 +303,8 @@ pub fn delete_file_request(app: &mut App, index: usize) {
             .header("Authorization", format!("Bearer {}", app.token))
             .send();
 
-        match response {
+        match response
+        {
             Ok(response) => {
                 if response.status().is_success() {
                     app.packages.remove(index);

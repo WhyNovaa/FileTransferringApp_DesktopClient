@@ -64,9 +64,9 @@ impl PackageRow {
             .push(Checkbox::new("", self.checked).on_toggle(move |_| Message::ToggleCheck(index)))
             .push(text(self.filename.to_string()).size(20))
             .push(Space::with_width(Length::Fill))
-            .push(download_btn())
+            .push(download_btn(self.filename.clone()))
             .push(Space::with_width(20))
-            .push(del_btn(Message::DeleteFile(index)))
+            .push(del_btn(index))
             .push(Space::with_width(10))
             .height(60)
             .align_items(Alignment::Center);
@@ -181,25 +181,16 @@ pub fn input_field(_placeholder: &str, _value: &str, ) -> TextInput<'static, Mes
         .line_height(text::LineHeight::Relative(1.75))
 }
 
-pub fn del_btn(event: Message) -> Button<'static, Message> {
+pub fn del_btn(index: usize) -> Button<'static, Message> {
     let image = Image::new("src/resources/delete.png");
 
     Button::new(image)
-        .on_press(event)
+        .on_press(Message::DeleteFile(index))
         .width(32)
         .height(32)
         .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
 }
 
-/*pub fn edit_btn(event: Message) -> Button<'static, Message> {
-    let image = Image::new("src/resources/edit.png");
-
-    Button::new(image)
-        .on_press(event)
-        .width(32)
-        .height(32)
-        .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
-}*/
 
 pub fn refresh_btn() -> Button<'static, Message> {
     let image = Image::new("src/resources/refresh.png");
@@ -210,18 +201,10 @@ pub fn refresh_btn() -> Button<'static, Message> {
         .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
 }
 
-pub fn download_btn() -> Button<'static, Message> {
+pub fn download_btn(filename: String) -> Button<'static, Message> {
     let image = Image::new("src/resources/download.png");
     Button::new(image)
-        .on_press(Message::DownloadFiles)
-        .width(32)
-        .height(32)
-        .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
-}
-pub fn upload_btn() -> Button<'static, Message> {
-    let image = Image::new("src/resources/download.png");
-    Button::new(image)
-        .on_press(Message::UploadFiles)
+        .on_press(Message::DownloadFile(filename))
         .width(32)
         .height(32)
         .style(theme::Button::Custom(Box::new(ButtonStyle::Transparent)))
