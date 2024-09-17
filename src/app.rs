@@ -14,7 +14,8 @@ pub struct App {
     pub client: Client,
     pub login_error: Option<String>,
     pub packages: Vec<ui::PackageRow>,
-    pub server: Server
+    pub server: Server,
+    pub search_text: String,
 }
 
 pub struct LoginField {
@@ -43,6 +44,7 @@ pub enum Message {
     Refresh,
     DownloadFile(String),
     UploadFiles,
+    SearchFieldChanged(String),
 }
 
 
@@ -69,7 +71,8 @@ impl Sandbox for App {
                 .collect(),
             server: Server {
                 url: env::var("SERVER_URL").expect("SERVER_URL must be set").to_string(),
-            }
+            },
+            search_text: String::new(),
         }
     }
 
@@ -82,7 +85,7 @@ impl Sandbox for App {
     }
 
     fn view(&self) -> Element<Message> {
-        ui::view(&self)
+        ui::view(self)
     }
 
     fn theme(&self) -> Theme {

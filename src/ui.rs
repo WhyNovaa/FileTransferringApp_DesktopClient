@@ -1,8 +1,6 @@
 use iced::{theme, Alignment, Element, Length, Padding};
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{button, container, text, Button, Checkbox, Column, Container, Image, Row, Scrollable, Space, TextInput};
-
-
 use crate::styles::{ContainerStyle, ButtonStyle, FileStyle};
 use crate::app::{App, LoginField, Message, Page};
 
@@ -10,7 +8,7 @@ pub fn view(app: &App) -> Element<Message> {
     let content =
         match app.page {
             Page::Login => log_in_page(&app.login_field, app.login_error.clone()),
-            Page::Main => main_page(&app)
+            Page::Main => main_page(app)
         };
 
 
@@ -22,13 +20,14 @@ pub fn view(app: &App) -> Element<Message> {
                 .width(Length::Fill)
                 .align_items(Alignment::Center)
                 .push(content)
-                .push(page_footer(app.page.clone())),
+                .push(page_footer(app.page.clone(), &app.search_text)),
 
-            Page::Main => wrapper.push(page_footer(app.page.clone()))
+            Page::Main => wrapper.push(page_footer(app.page.clone(), &app.search_text))
                 .spacing(10)
                 .width(Length::Fill)
                 .align_items(Alignment::Center)
-                .push(content),
+                .push(content)
+                .height(Length::Fill),
         };
 
     let temp_container = container(wrapper)
@@ -76,11 +75,19 @@ impl PackageRow {
     }
 }
 
-pub fn page_footer(page: Page) -> Container<'static, Message> {
+pub fn page_footer(page: Page, search_text: &String) -> Container<'static, Message> {
     let mut footer = Row::new();
 
         if page == Page::Main {
             footer = footer
+                .push(
+                    search_input_field("Search...", search_text)
+                        .on_input(
+                            |search| {
+                                Message::SearchFieldChanged(search.to_lowercase())
+                            }
+                        )
+                )
                 .push(button("Select all").on_press(Message::SelectAll(true))
                     .style(theme::Button::Custom(Box::new(ButtonStyle::Standard))))
                 .push(button("Unselect all").on_press(Message::SelectAll(false))
@@ -111,7 +118,7 @@ pub fn log_in_page(login_field: &LoginField, login_error: Option<String>) -> Con
     let mut column = Column::new()
         .push(text("File Transferring App"))
         .push(
-            input_field("Login", &login_field.login)
+            log_in_input_field("Login", &login_field.login)
                 .on_input(
                     |login| {
                         Message::LoginFieldChanged(login, login_field.password.clone())
@@ -119,7 +126,7 @@ pub fn log_in_page(login_field: &LoginField, login_error: Option<String>) -> Con
                 )
         )
         .push(
-            input_field("Password", &login_field.password)
+            log_in_input_field("Password", &login_field.password)
                 .on_input(
                     |password| {
                         Message::LoginFieldChanged(login_field.login.clone(), password)
@@ -157,7 +164,11 @@ pub fn main_page(app: &App) -> Container<'static, Message> {
 
 
     for (index, package) in app.packages.iter().enumerate() {
-        column = column.push(package.view(index));
+        if package.filename
+            .to_lowercase()
+            .starts_with(app.search_text.as_str()) || app.search_text == "" {
+            column = column.push(package.view(index));
+        }
     }
 
     column = column
@@ -174,11 +185,17 @@ pub fn main_page(app: &App) -> Container<'static, Message> {
 
 }
 
-pub fn input_field(_placeholder: &str, _value: &str, ) -> TextInput<'static, Message> {
+pub fn log_in_input_field(_placeholder: &str, _value: &str, ) -> TextInput<'static, Message> {
     TextInput::new(_placeholder, _value)
         .width(Length::Fixed(500.0))
         .padding(Padding::from(10))
         .line_height(text::LineHeight::Relative(1.75))
+}
+
+pub fn search_input_field(_placeholder: &str, _value: &str, ) -> TextInput<'static, Message> {
+    TextInput::new(_placeholder, _value)
+        .width(Length::Fixed(300.0))
+        .padding(Padding::from(10))
 }
 
 pub fn del_btn(index: usize) -> Button<'static, Message> {

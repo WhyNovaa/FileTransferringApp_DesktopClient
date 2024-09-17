@@ -39,9 +39,7 @@ pub fn handle_update(app: &mut App, message: Message) {
             }
         }
         Message::SelectAll(checked) => {
-            for package_row in &mut app.packages {
-                package_row.checked = checked;
-            }
+            select_all(&mut app.packages, checked);
         }
         Message::DeleteSelected => {
             if delete_selected(app) {
@@ -65,9 +63,18 @@ pub fn handle_update(app: &mut App, message: Message) {
                 println!("Upload files error");
             }
         }
+        Message::SearchFieldChanged(search) => {
+            app.search_text = search;
+            select_all(&mut app.packages, false);
+        }
     }
 }
 
+fn select_all(packages: &mut Vec<PackageRow>, checked: bool) {
+    for package_row in packages {
+        package_row.checked = checked;
+    }
+}
 
 fn upload_request(app: &App) -> bool {
     let result = FileDialog::new()
