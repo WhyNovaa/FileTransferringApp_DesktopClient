@@ -166,7 +166,7 @@ pub fn main_page(app: &App) -> Container<'static, Message> {
     for (index, package) in app.packages.iter().enumerate() {
         if package.filename
             .to_lowercase()
-            .starts_with(app.search_text.as_str()) || app.search_text == "" {
+            .contains(app.search_text.as_str()) || app.search_text == "" {
             column = column.push(package.view(index));
         }
     }

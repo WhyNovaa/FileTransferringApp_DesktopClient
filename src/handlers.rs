@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use reqwest::blocking::multipart;
-use crate::app::{App, Message, Page};
-use crate::ui::PackageRow;
 use std::fs::{metadata, File};
 use std::io::{copy, Read};
 use std::path::Path;
 use native_dialog::FileDialog;
 use reqwest::blocking::multipart::Part;
+use chrono::Utc;
+
+use crate::app::{App, LoginField, Message, Page};
+use crate::ui::PackageRow;
 
 pub fn handle_update(app: &mut App, message: Message) {
     match message {
@@ -70,6 +72,12 @@ pub fn handle_update(app: &mut App, message: Message) {
     }
 }
 
+
+pub fn is_token_expired(token_exp: i64) -> bool {
+    let cur_time = Utc::now().timestamp();
+
+    token_exp < cur_time
+}
 fn select_all(packages: &mut Vec<PackageRow>, checked: bool) {
     for package_row in packages {
         package_row.checked = checked;
@@ -223,6 +231,7 @@ fn delete_selected(app: &App) -> bool {
 
 
 
+
 pub fn log_in_request(app: &mut App) -> bool {
     let params = [
         ("username", app.login_field.login.as_str()),
@@ -243,15 +252,19 @@ pub fn log_in_request(app: &mut App) -> bool {
                 if let Some(token) = json.get("token") {
                     app.token = token.clone();
                     app.page = Page::Main;
+                    if let Some(seconds) = json.get("jwt_exp_seconds") {
+                        app.token_exp = Utc::now().timestamp() + seconds.parse::<i64>().expect("jwt seconds parse error");
+                        app.login_error = Some(String::from("JWT expired, log in again"));
+                    }
                     return true;
                 }
             }
 
-            app.login_error = Some("Wrong username or password".to_string());
+            app.login_error = Some(String::from("Wrong username or password"));
             false
         }
         Err(e) => {
-            app.login_error = Some("Server connection error".to_string());
+            app.login_error = Some(String::from("Server connection error"));
             eprintln!("Error sending request: {}", e);
             false
         }
@@ -328,4 +341,10 @@ pub fn delete_file_request(app: &mut App, index: usize) {
     else {
         eprintln!("Index out of bounds");
     }
+}
+
+
+pub fn clear_login_field(login_field: &mut LoginField) {
+    login_field.login = String::from("");
+    login_field.password = String::from("");
 }

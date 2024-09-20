@@ -4,13 +4,14 @@ use iced::{Element, Sandbox, Theme};
 use reqwest::blocking::Client;
 
 use crate::ui;
-use crate::handlers::handle_update;
+use crate::handlers::{handle_update, is_token_expired, clear_login_field};
 
 pub struct App {
     pub theme: Theme,
     pub page: Page,
     pub login_field: LoginField,
     pub token: String,
+    pub token_exp: i64,
     pub client: Client,
     pub login_error: Option<String>,
     pub packages: Vec<ui::PackageRow>,
@@ -64,6 +65,7 @@ impl Sandbox for App {
                 password: String::new(),
             },
             token: String::new(),
+            token_exp: 0,
             client: Client::new(),
             login_error: None,
             packages: (1..=100)
@@ -81,7 +83,16 @@ impl Sandbox for App {
     }
 
     fn update(&mut self, message: Message) {
-        handle_update(self, message);
+        if self.page == Page::Login {
+            handle_update(self, message);
+        }
+        else if is_token_expired(self.token_exp) {
+            self.page = Page::Login;
+            clear_login_field(&mut self.login_field);
+        }
+        else {
+            handle_update(self, message);
+        }
     }
 
     fn view(&self) -> Element<Message> {
